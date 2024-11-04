@@ -1,0 +1,214 @@
+---
+title: "Automobile Fuel Efficiency Analysis"
+---
+
+
+```{r}
+# Load required libraries
+library(tidyverse)
+library(caret)
+library(reshape2)
+library(corrplot)
+
+```
+
+
+```{r}
+# Load the mtcars dataset
+data(mtcars)
+
+# Display the first few rows of the dataset
+head(mtcars)
+
+```
+
+
+```{r}
+# Check column names and dimensions
+colnames(mtcars)
+dim(mtcars)
+
+```
+32 rows and 11 columns
+
+```{r}
+# Summarize the dataset
+summary(mtcars)
+
+```
+
+
+```{r}
+# Check for missing values
+missing_values <- sum(is.na(mtcars))
+cat("Number of missing values:", missing_values, "\n")
+
+```
+**Data Cleaning and Preparation**
+
+```{r}
+# Convert transmission column to a factor
+mtcars$am <- factor(mtcars$am, labels = c("Automatic", "Manual"))
+
+# Preview the cleaned data
+head(mtcars)
+
+```
+
+
+```{r}
+mtcars_long <- reshape2::melt(mtcars)
+ggplot(mtcars_long, aes(x=variable, y=value)) +
+  geom_boxplot(outlier.color="red", outlier.shape=16, outlier.size=2) +
+  labs(title="Boxplot of mtcars Variables with Outliers", x="Variable", y="Value") +
+  theme_minimal()
+
+```
+
+
+```{r}
+# Calculate IQR for 'carb'
+Q1 <- quantile(mtcars$carb, 0.25)
+Q3 <- quantile(mtcars$carb, 0.75)
+IQR <- Q3 - Q1
+
+# Define lower and upper bounds for outliers
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+# Filter the dataset to exclude outliers in 'carb'
+mtcars <- mtcars %>% filter(carb >= lower_bound & carb <= upper_bound)
+print(mtcars)
+
+```
+**Exploratory Data Analysis**
+
+```{r}
+#Bubble Plot: MPG vs. Horsepower
+ggplot(mtcars, aes(x = hp, y = mpg, size = cyl, color = factor(cyl))) +
+  geom_point(alpha = 0.7) +
+  scale_size_continuous(range = c(2, 10)) +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e", "#2ca02c")) +
+  labs(x = "Horsepower", y = "MPG", size = "Number of Cylinders", color = "Number of Cylinders", title = "MPG vs. Horsepower (Bubble Size: Number of Cylinders)") +
+  theme_minimal()
+
+
+```
+
+```{r}
+#Pie Chart: Distribution of Car Models by Number of Cylinders
+cylinder_counts <- table(mtcars$cyl)
+pie(cylinder_counts, labels = paste(names(cylinder_counts), "Cylinders"), main = "Distribution of Car Models by Number of Cylinders")
+
+```
+
+
+```{r}
+#Bar Plot: MPG by Car Model
+ggplot(mtcars, aes(x = rownames(mtcars), y = mpg)) +
+  geom_bar(stat = "identity", fill = "pink") +
+  labs(x = "Car Model", y = "MPG", title = "MPG by Car Model") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+```
+
+
+```{r}
+#Stacked Bar Plot: MPG by Cylinder and Transmission Type
+ggplot(mtcars, aes(x = factor(cyl), fill = am)) +
+  geom_bar() +
+  labs(x = "Cylinders", y = "Count", title = "MPG by Cylinder and Transmission Type") +
+  theme_minimal()
+
+```
+ 
+
+```{r}
+# Correlation Heatmap (ensure all columns are numeric)
+numeric_vars <- mtcars %>% select_if(is.numeric)
+corr_matrix <- cor(numeric_vars)
+corrplot(corr_matrix, method="color", type="upper", tl.col="black", tl.srt=45)
+
+```
+
+
+**Model Building: Linear Regression**
+
+```{r}
+#Scatter Plot with Linear Trend Line for MPG vs Horsepower
+ggplot(mtcars, aes(x=hp, y=mpg)) +
+  geom_point(aes(color=factor(cyl)), size=3) +
+  geom_smooth(method="lm", se=FALSE, color="blue") +
+  labs(title="MPG vs Horsepower", x="Horsepower", y="MPG", color="Cylinders")
+
+```
+
+
+```{r}
+#Splitting Data into Training and Testing Sets
+set.seed(123)
+trainIndex <- createDataPartition(mtcars$mpg, p=0.8, list=FALSE)
+train_data <- mtcars[trainIndex,]
+test_data <- mtcars[-trainIndex,]
+
+```
+
+
+```{r}
+#Fitting Linear Regression Model
+model <- lm(mpg ~ hp + wt + cyl, data=train_data)
+summary(model)
+
+```
+**Model Evaluation on Test Set**
+
+```{r}
+# Predict on test data
+predictions <- predict(model, newdata=test_data)
+
+```
+
+```{r}
+# Calculate RMSE
+rmse <- sqrt(mean((predictions - test_data$mpg)^2))
+cat("RMSE on Test Set:", rmse, "\n")
+
+```
+
+
+```{r}
+#Comparing Predictions vs. Actuals
+comparison <- data.frame(Actual = test_data$mpg, Predicted = predictions)
+print(comparison)
+
+```
+
+
+```{r}
+#Visualization of Actual vs Predicted MPG
+ggplot(comparison, aes(x=Actual, y=Predicted)) +
+  geom_point(color='purple') +
+  geom_abline(slope=1, intercept=0, color="red", linetype="dashed") +
+  labs(title="Actual vs Predicted MPG", x="Actual MPG", y="Predicted MPG")
+
+```
+
+```{r}
+# Plot Residuals to check for randomness
+residuals <- test_data$mpg - predictions
+ggplot(data.frame(Residuals = residuals), aes(x = Residuals)) +
+  geom_histogram(bins = 10, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Residuals", x = "Residuals", y = "Frequency")
+```
+```{r}
+# Calculate residuals and sort them from highest to lowest
+comparison <- data.frame(Actual = test_data$mpg, Predicted = predictions)
+comparison$Residual <- comparison$Actual - comparison$Predicted
+comparison <- comparison %>% arrange(desc(Residual)) # Sort by residuals in descending order
+
+# Display the sorted comparison
+print(comparison)
+
+```
+
